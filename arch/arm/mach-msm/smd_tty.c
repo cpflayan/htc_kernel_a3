@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_tty.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -740,7 +740,7 @@ static struct notifier_block smd_tty_pm_nb = {
 static void smd_tty_log_init(void)
 {
 	smd_tty_log_ctx = ipc_log_context_create(SMD_TTY_LOG_PAGES,
-						"smd_tty", 0);
+						"smd_tty");
 	if (!smd_tty_log_ctx)
 		pr_err("%s: Unable to create IPC log", __func__);
 }
@@ -805,6 +805,27 @@ static int smd_tty_device_init(int idx)
 	setup_timer(&smd_tty[idx].buf_req_timer, buf_req_retry,
 			(unsigned long)&smd_tty[idx]);
 	init_waitqueue_head(&smd_tty[idx].ch_opened_wait_queue);
+	if (idx == DS_IDX) {
+		/*
+		 * DS port uses the kernel API starting with
+		 * 8660 Fusion.  Only register the userspace
+		 * platform device for older targets.
+		 */
+		int legacy_ds = 0;
+
+		legacy_ds |= cpu_is_msm7x01() || cpu_is_msm7x25();
+		legacy_ds |= cpu_is_msm7x27() || cpu_is_msm7x30();
+		legacy_ds |= cpu_is_qsd8x50() || cpu_is_msm8x55();
+		/*
+		 * use legacy mode for 8660 Standalone (subtype 0)
+		 */
+		legacy_ds |= cpu_is_msm8x60() &&
+				(socinfo_get_platform_subtype() == 0x0);
+
+		if (!legacy_ds)
+			return 0;
+	}
+
 	ret = platform_driver_register(&smd_tty[idx].driver);
 	if (ret)
 		return ret;
@@ -839,27 +860,6 @@ static int smd_tty_core_init(void)
 		} else {
 			strlcpy(smd_tty[idx].dev_name, smd_configs[n].dev_name,
 							SMD_MAX_CH_NAME_LEN);
-		}
-
-		if (idx == DS_IDX) {
-			/*
-			 * DS port uses the kernel API starting with
-			 * 8660 Fusion.  Only register the userspace
-			 * platform device for older targets.
-			 */
-			int legacy_ds = 0;
-
-			legacy_ds |= cpu_is_msm7x01() || cpu_is_msm7x25();
-			legacy_ds |= cpu_is_msm7x27() || cpu_is_msm7x30();
-			legacy_ds |= cpu_is_qsd8x50() || cpu_is_msm8x55();
-			/*
-			 * use legacy mode for 8660 Standalone (subtype 0)
-			 */
-			legacy_ds |= cpu_is_msm8x60() &&
-					(socinfo_get_platform_subtype() == 0x0);
-
-			if (!legacy_ds)
-				continue;
 		}
 
 		ret = smd_tty_device_init(idx);

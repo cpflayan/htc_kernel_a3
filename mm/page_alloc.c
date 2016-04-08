@@ -61,6 +61,8 @@
 #include <linux/migrate.h>
 #include <linux/page-debug-flags.h>
 
+#include <htc_debug/stability/htc_report_meminfo.h>
+
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
 #include "internal.h"
@@ -788,6 +790,7 @@ bool is_cma_pageblock(struct page *page)
 {
 	return get_pageblock_migratetype(page) == MIGRATE_CMA;
 }
+EXPORT_SYMBOL(is_cma_pageblock);
 
 /* Free whole pageblock and set it's migration type to MIGRATE_CMA. */
 void __init init_cma_reserved_pageblock(struct page *page)
@@ -5535,6 +5538,8 @@ void *__init alloc_large_system_hash(const char *tablename,
 			if (get_order(size) < MAX_ORDER) {
 				table = alloc_pages_exact(size, GFP_ATOMIC);
 				kmemleak_alloc(table, size, 1, GFP_ATOMIC);
+				add_meminfo_total_pages_on(NR_HASHTABLES_PAGES,
+					PAGE_ALIGN(size) >> PAGE_SHIFT, table);
 			}
 		}
 	} while (!table && size > PAGE_SIZE && --log2qty);

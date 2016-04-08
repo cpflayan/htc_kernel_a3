@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -453,7 +453,7 @@ static int update_region_prio(struct ocmem_region *region)
 		region->max_prio = NO_PRIO;
 	}
 	pr_debug("ocmem: Updating prio of region %p as %d\n",
-			region, max_prio);
+			region, region->max_prio);
 
 	return 0;
 }
@@ -718,6 +718,8 @@ static int __sched_grow(struct ocmem_req *req, bool can_block)
 	struct ocmem_zone *zone = get_zone(owner);
 	struct ocmem_region *region = NULL;
 
+	BUG_ON(!zone);
+
 	matched_region = find_region_match(req->req_start, req->req_end);
 	matched_req = find_req_match(req->req_id, matched_region);
 
@@ -855,8 +857,10 @@ err_not_supported:
 	return OP_FAIL;
 region_error:
 	zone->z_ops->free(zone, alloc_addr, curr_sz);
-	detach_req(region, req);
-	update_region_prio(region);
+	if (region) {
+		detach_req(region, req);
+		update_region_prio(region);
+	}
 	/* req is going to be destroyed by the caller anyways */
 internal_error:
 	destroy_region(region);
@@ -2123,6 +2127,7 @@ static int do_allocate(struct ocmem_req *req, bool can_block, bool can_wait)
 
 	down_write(&req->rw_sem);
 
+	mutex_lock(&allocation_mutex);
 retry_allocate:
 
 	/* Take the scheduler mutex */
@@ -2132,14 +2137,12 @@ retry_allocate:
 
 	if (rc == OP_EVICT) {
 
-		mutex_lock(&allocation_mutex);
 		ret = run_evict(req);
 
 		if (ret == 0) {
 			rc = sched_restore(req);
 			if (rc < 0) {
 				pr_err("Failed to restore for req %p\n", req);
-				mutex_unlock(&allocation_mutex);
 				goto err_allocate_fail;
 			}
 			req->edata = NULL;
@@ -2147,13 +2150,13 @@ retry_allocate:
 			pr_debug("Attempting to re-allocate req %p\n", req);
 			req->req_start = 0x0;
 			req->req_end = 0x0;
-			mutex_unlock(&allocation_mutex);
 			goto retry_allocate;
 		} else {
-			mutex_unlock(&allocation_mutex);
 			goto err_allocate_fail;
 		}
 	}
+
+	mutex_unlock(&allocation_mutex);
 
 	if (rc == OP_FAIL) {
 		inc_ocmem_stat(zone_of(req), NR_ALLOCATION_FAILS);
@@ -2179,6 +2182,7 @@ retry_allocate:
 	up_write(&req->rw_sem);
 	return 0;
 err_allocate_fail:
+	mutex_unlock(&allocation_mutex);
 	up_write(&req->rw_sem);
 	return -EINVAL;
 }

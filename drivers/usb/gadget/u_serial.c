@@ -16,7 +16,6 @@
  * either version 2 of that License or (at your option) any later version.
  */
 
-/* #define VERBOSE_DEBUG */
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -57,7 +56,7 @@
  * is managed in userspace ... OBEX, PTP, and MTP have been mentioned.
  */
 
-#define PREFIX	"ttyGS"
+#define PREFIX	"ttyHSUSB"
 
 /*
  * gserial is the lifecycle interface, used by USB functions
@@ -125,8 +124,8 @@ struct gs_port {
 	struct gs_buf		port_write_buf;
 	wait_queue_head_t	drain_wait;	/* wait while writes drain */
 
-	/* REVISIT this state ... */
-	struct usb_cdc_line_coding port_line_coding;	/* 8-N-1 etc */
+	
+	struct usb_cdc_line_coding port_line_coding;	
 	unsigned long           nbytes_from_host;
 	unsigned long           nbytes_to_tty;
 	unsigned long           nbytes_from_tty;
@@ -462,10 +461,6 @@ __acquires(&port->port_lock)
  * Context: caller owns port_lock, and port_usb is set
  */
 static unsigned gs_start_rx(struct gs_port *port)
-/*
-__releases(&port->port_lock)
-__acquires(&port->port_lock)
-*/
 {
 	struct list_head	*pool = &port->read_pool;
 	struct usb_ep		*out = port->port_usb->out;
@@ -658,7 +653,7 @@ static void gs_write_complete(struct usb_ep *ep, struct usb_request *req)
 		/* presumably a transient fault */
 		pr_warning("%s: unexpected %s status %d\n",
 				__func__, ep->name, req->status);
-		/* FALL THROUGH */
+		
 	case 0:
 		/* normal completion */
 		if (port->port_usb)
@@ -781,6 +776,9 @@ static int gs_open(struct tty_struct *tty, struct file *file)
 	struct gs_port	*port;
 	int		status;
 
+	if (port_num < 0 || port_num >= n_ports)
+		return -ENXIO;
+
 	do {
 		mutex_lock(&ports[port_num].lock);
 		port = ports[port_num].port;
@@ -846,7 +844,7 @@ static int gs_open(struct tty_struct *tty, struct file *file)
 	 * to let rmmod work faster (but this way isn't wrong).
 	 */
 
-	/* REVISIT maybe wait for "carrier detect" */
+	
 
 	tty->driver_data = port;
 	port->port_tty = tty;
@@ -959,7 +957,7 @@ static int gs_write(struct tty_struct *tty, const unsigned char *buf, int count)
 	spin_lock_irqsave(&port->port_lock, flags);
 	if (count)
 		count = gs_buf_put(&port->port_write_buf, buf, count);
-	/* treat count == 0 as flush_chars() */
+	
 	if (port->port_usb)
 		status = gs_start_tx(port);
 	spin_unlock_irqrestore(&port->port_lock, flags);
@@ -1207,6 +1205,8 @@ static ssize_t debug_read_status(struct file *file, char __user *ubuf,
 
 	tty = ui_dev->port_tty;
 	gser = ui_dev->port_usb;
+	if (ui_dev->port_usb == NULL)
+		return -ENODEV;
 
 	buf = kzalloc(sizeof(char) * BUF_SIZE, GFP_KERNEL);
 	if (!buf)
@@ -1338,6 +1338,7 @@ int gserial_setup(struct usb_gadget *g, unsigned count)
 	if (!gs_tty_driver)
 		return -ENOMEM;
 
+	gs_tty_driver->owner = THIS_MODULE;
 	gs_tty_driver->driver_name = "g_serial";
 	gs_tty_driver->name = PREFIX;
 	/* uses dynamically assigned dev_t values */
@@ -1356,6 +1357,10 @@ int gserial_setup(struct usb_gadget *g, unsigned count)
 			B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 	gs_tty_driver->init_termios.c_ispeed = 9600;
 	gs_tty_driver->init_termios.c_ospeed = 9600;
+
+	gs_tty_driver->init_termios.c_lflag = 0;
+	gs_tty_driver->init_termios.c_iflag = 0;
+	gs_tty_driver->init_termios.c_oflag = 0;
 
 	coding.dwDTERate = cpu_to_le32(9600);
 	coding.bCharFormat = 8;
@@ -1526,12 +1531,9 @@ int gserial_connect(struct gserial *gser, u8 port_num)
 	gser->ioport = port;
 	port->port_usb = gser;
 
-	/* REVISIT unclear how best to handle this state...
-	 * we don't really couple it with the Linux TTY.
-	 */
 	gser->port_line_coding = port->port_line_coding;
 
-	/* REVISIT if waiting on "carrier detect", signal. */
+	
 
 	/* if it's already open, start I/O ... and notify the serial
 	 * protocol about open/close status (connect/disconnect).
@@ -1578,7 +1580,7 @@ void gserial_disconnect(struct gserial *gser)
 	/* tell the TTY glue not to do I/O here any more */
 	spin_lock_irqsave(&port->port_lock, flags);
 
-	/* REVISIT as above: how best to track this? */
+	
 	port->port_line_coding = gser->port_line_coding;
 
 	port->port_usb = NULL;

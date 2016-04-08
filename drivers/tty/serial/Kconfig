@@ -197,7 +197,7 @@ config SERIAL_SAMSUNG_UARTS_4
 config SERIAL_SAMSUNG_UARTS
 	int
 	depends on ARM && PLAT_SAMSUNG
-	default 6 if ARCH_S5P6450
+	default 6 if CPU_S5P6450
 	default 4 if SERIAL_SAMSUNG_UARTS_4 || CPU_S3C2416
 	default 3
 	help
@@ -1003,6 +1003,14 @@ config SERIAL_MSM_HSL
 	default n
 	help
 	  Select this module to enable MSM high speed UART driver.
+
+config SERIAL_CIR
+	tristate "MSM UART High Speed : Legacy mode CIR Driver"
+	depends on ARM && ARCH_MSM
+	select SERIAL_CORE
+	default n
+	help
+	   Select this module to enable MSM high speed CIR driver.
 
 config SERIAL_MSM_HSL_CONSOLE
 	bool "MSM High speed serial legacy mode console support"

@@ -182,7 +182,6 @@ struct qpnp_pin_chip {
 	struct device_node	*int_ctrl;
 	struct list_head	chip_list;
 	struct dentry		*dfs_dir;
-	bool			chip_registered;
 };
 
 static LIST_HEAD(qpnp_pin_chips);
@@ -913,7 +912,7 @@ static int qpnp_pin_apply_config(struct qpnp_pin_chip *q_chip,
 static int qpnp_pin_free_chip(struct qpnp_pin_chip *q_chip)
 {
 	struct spmi_device *spmi = q_chip->spmi;
-	int i, rc = 0;
+	int rc, i;
 
 	if (q_chip->chip_gpios)
 		for (i = 0; i < spmi->num_dev_node; i++)
@@ -922,12 +921,10 @@ static int qpnp_pin_free_chip(struct qpnp_pin_chip *q_chip)
 	mutex_lock(&qpnp_pin_chips_lock);
 	list_del(&q_chip->chip_list);
 	mutex_unlock(&qpnp_pin_chips_lock);
-	if (q_chip->chip_registered) {
-		rc = gpiochip_remove(&q_chip->gpio_chip);
-		if (rc)
-			dev_err(&q_chip->spmi->dev, "%s: unable to remove gpio\n",
-					__func__);
-	}
+	rc = gpiochip_remove(&q_chip->gpio_chip);
+	if (rc)
+		dev_err(&q_chip->spmi->dev, "%s: unable to remove gpio\n",
+				__func__);
 	kfree(q_chip->chip_gpios);
 	kfree(q_chip->pmic_pins);
 	kfree(q_chip);
@@ -1177,6 +1174,72 @@ static int qpnp_pin_is_valid_pin(struct qpnp_pin_spec *q_spec)
 	return 0;
 }
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+int qpnp_pin_dump(struct seq_file *m, int curr_len, char *gpio_buffer)
+{
+        int i, j, rc;
+        u64 value = 0;
+        enum qpnp_pin_param_type type;
+        const char *filename;
+        int len;
+        char read_buf[256];
+        char *title_msg = "---------- QPNP PIN ---------";
+        struct qpnp_pin_chip *q_chip;
+        struct qpnp_pin_spec *q_spec;
+
+        if (m)
+                seq_printf(m, "%s\n", title_msg);
+        else {
+                pr_info("%s\n", title_msg);
+                curr_len += sprintf(gpio_buffer + curr_len,
+                "%s\n", title_msg);
+        }
+        list_for_each_entry(q_chip, &qpnp_pin_chips, chip_list) {
+                if (m)
+                        seq_printf(m, "%s\n", q_chip->gpio_chip.label);
+                else {
+                        pr_info("%s\n", q_chip->gpio_chip.label);
+                        curr_len += sprintf(gpio_buffer + curr_len,
+                        "%s\n", q_chip->gpio_chip.label);
+                }
+
+                for (i = 0; i < q_chip->gpio_chip.ngpio; i++) {
+                        memset(read_buf, 0, sizeof(read_buf));
+                        len = 0;
+                        q_spec = qpnp_chip_gpio_get_spec(q_chip, i);
+                        if (q_spec->type == Q_GPIO_TYPE)
+                                len += sprintf(read_buf + len, "GPIO[%2d]: ", q_spec->pmic_pin);
+                        else
+                                len += sprintf(read_buf + len, "MPP[%2d]: ", q_spec->pmic_pin);
+
+                        for (j = 0; j < Q_NUM_PARAMS; j++) {
+                                type = dfs_args[j].type;
+                                filename = dfs_args[j].filename;
+
+                                rc = qpnp_pin_check_config(type, q_spec, 0);
+                                if (rc == -ENXIO)
+                                        continue;
+
+                                qpnp_pin_debugfs_get(&q_spec->params[type], &value);
+                                len += sprintf(read_buf + len, "[%s]%llu ", filename, value);
+                        }
+
+                        read_buf[255] = '\0';
+                        if (m)
+                                seq_printf(m, "%s\n", read_buf);
+                        else {
+                                pr_info("%s\n", read_buf);
+                                curr_len += sprintf(gpio_buffer +
+                                curr_len, "%s\n", read_buf);
+                        }
+                }
+        }
+
+        return curr_len;
+}
+EXPORT_SYMBOL_GPL(qpnp_pin_dump);
+#endif
+
 static int qpnp_pin_probe(struct spmi_device *spmi)
 {
 	struct qpnp_pin_chip *q_chip;
@@ -1345,7 +1408,6 @@ static int qpnp_pin_probe(struct spmi_device *spmi)
 		goto err_probe;
 	}
 
-	q_chip->chip_registered = true;
 	/* now configure gpio config defaults if they exist */
 	for (i = 0; i < spmi->num_dev_node; i++) {
 		q_spec = qpnp_chip_gpio_get_spec(q_chip, i);

@@ -84,6 +84,7 @@ struct snd_compr_stream {
 	bool metadata_set;
 	bool next_track;
 	void *private_data;
+	struct snd_soc_pcm_runtime *be;
 };
 
 /**
@@ -130,6 +131,8 @@ struct snd_compr_ops {
 			struct snd_compr_caps *caps);
 	int (*get_codec_caps) (struct snd_compr_stream *stream,
 			struct snd_compr_codec_caps *codec);
+	int (*config_effect)(struct snd_compr_stream *stream, void *data,
+			void *payload);
 };
 
 /**

@@ -1562,7 +1562,7 @@ static int dapm_power_widgets(struct snd_soc_dapm_context *dapm, int event)
 	struct snd_soc_dapm_context *d;
 	LIST_HEAD(up_list);
 	LIST_HEAD(down_list);
-	LIST_HEAD(async_domain);
+	ASYNC_DOMAIN_EXCLUSIVE(async_domain);
 	enum snd_soc_bias_level bias;
 
 	trace_snd_soc_dapm_start(card);
@@ -3104,7 +3104,7 @@ void snd_soc_dapm_rtd_stream_event(struct snd_soc_pcm_runtime *rtd,
 
 	dev_dbg(rtd->dev, "rtd stream %d event %d\n", stream, event);
 
-	mutex_lock_nested(&card->dapm_mutex, SND_SOC_DAPM_CLASS_PCM);
+	mutex_lock_nested(&card->dapm_mutex, SND_SOC_DAPM_CLASS_RUNTIME);
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		widget_stream_event(pdapm, rtd->cpu_dai->playback_aif, event);
 		widget_stream_event(cdapm, rtd->codec_dai->playback_aif, event);
@@ -3150,9 +3150,7 @@ int snd_soc_dapm_stream_event(struct snd_soc_pcm_runtime *rtd,
 void snd_soc_dapm_codec_stream_event(struct snd_soc_codec *codec,
 	const char *stream, int event)
 {
-//	mutex_lock(&codec->card->dapm_mutex);
 	soc_dapm_stream_event(&codec->dapm, stream, event);
-//	mutex_unlock(&codec->card->dapm_mutex);
 }
 EXPORT_SYMBOL(snd_soc_dapm_codec_stream_event);
 
@@ -3394,9 +3392,6 @@ static void soc_dapm_shutdown_codec(struct snd_soc_dapm_context *dapm)
 		}
 	}
 
-	/* If there were no widgets to power down we're already in
-	 * standby.
-	 */
 	if (powerdown) {
 		snd_soc_dapm_set_bias_level(dapm, SND_SOC_BIAS_PREPARE);
 		dapm_seq_run(dapm, &down_list, 0, false);
@@ -3404,9 +3399,6 @@ static void soc_dapm_shutdown_codec(struct snd_soc_dapm_context *dapm)
 	}
 }
 
-/*
- * snd_soc_dapm_shutdown - callback for system shutdown
- */
 void snd_soc_dapm_shutdown(struct snd_soc_card *card)
 {
 	struct snd_soc_codec *codec;
@@ -3417,7 +3409,6 @@ void snd_soc_dapm_shutdown(struct snd_soc_card *card)
 	}
 }
 
-/* Module information */
 MODULE_AUTHOR("Liam Girdwood, lrg@slimlogic.co.uk");
 MODULE_DESCRIPTION("Dynamic Audio Power Management core for ALSA SoC");
 MODULE_LICENSE("GPL");

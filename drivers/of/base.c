@@ -229,6 +229,28 @@ int of_device_is_compatible(const struct device_node *device,
 }
 EXPORT_SYMBOL(of_device_is_compatible);
 
+int of_machine_projectid(int index) {
+	struct device_node *root;
+	static int isRead = 0;
+	static u32 array[3];
+	int ret = 0;
+
+	if (!isRead) {
+		root = of_find_node_by_path("/");
+		if (root) {
+			ret = of_property_read_u32_array(root, "htc,project-id", array, 3);
+
+			if (ret < 0)
+				return -1;
+
+			isRead = 1;
+		}
+	}
+
+	return array[index];
+}
+EXPORT_SYMBOL(of_machine_projectid);
+
 /**
  * of_machine_is_compatible - Test root of device tree for a given compatible value
  * @compat: compatible string to look for in root node's compatible property.
@@ -345,33 +367,6 @@ struct device_node *of_get_next_child(const struct device_node *node,
 	return next;
 }
 EXPORT_SYMBOL(of_get_next_child);
-
-/**
- *	of_get_next_available_child - Find the next available child node
- *	@node:	parent node
- *	@prev:	previous child of the parent node, or NULL to get first
- *
- *      This function is like of_get_next_child(), except that it
- *      automatically skips any disabled nodes (i.e. status = "disabled").
- */
-struct device_node *of_get_next_available_child(const struct device_node *node,
-	struct device_node *prev)
-{
-	struct device_node *next;
-
-	read_lock(&devtree_lock);
-	next = prev ? prev->sibling : node->child;
-	for (; next; next = next->sibling) {
-		if (!of_device_is_available(next))
-			continue;
-		if (of_node_get(next))
-			break;
-	}
-	of_node_put(prev);
-	read_unlock(&devtree_lock);
-	return next;
-}
-EXPORT_SYMBOL(of_get_next_available_child);
 
 /**
  *	of_find_node_by_path - Find a node matching a full OF path

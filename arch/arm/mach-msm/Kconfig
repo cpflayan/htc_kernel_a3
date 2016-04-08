@@ -34,7 +34,6 @@ config ARCH_MSM7X27
 	select MULTI_IRQ_HANDLER
 	select MSM_PROC_COMM_REGULATOR
 	select CLEANCACHE
-	select QCACHE
 	select MSM_PM2 if PM
 	select MSM_RUN_QUEUE_STATS if MSM_SOC_REV_A
 	select DONT_MAP_HOLE_AFTER_MEMBANK0
@@ -163,7 +162,6 @@ config ARCH_MSM8960
 	select MSM_REMOTE_SPINLOCK_SFPB
 	select ARCH_HAS_HOLES_MEMORYMODEL
 	select CLEANCACHE
-	select QCACHE
 	select MSM_MULTIMEDIA_USE_ION
 	select MULTI_IRQ_HANDLER
 	select MSM_PM8X60 if PM
@@ -238,7 +236,6 @@ config ARCH_APQ8064
 	select CPU_HAS_L2_PMU
 	select HOLES_IN_ZONE if SPARSEMEM
 	select CLEANCACHE
-	select QCACHE
 	select MIGHT_HAVE_PCI
 	select ARCH_SUPPORTS_MSI
 	select ARM_HAS_SG_CHAIN
@@ -1351,6 +1348,16 @@ choice
 		  their output to the serial port on MSM 8226 devices.
 endchoice
 
+config HTC_BUILD_EDIAG
+   bool "Build in EDIAG fixes"
+   default n
+   help
+   For EDIAG we need to do some additional fixes.
+
+config HTC_FD_MONITOR
+	bool "fd operation monitor mechanism"
+	default y
+
 choice
 	prompt "Default Timer"
 	default MSM7X00A_USE_GP_TIMER
@@ -1493,10 +1500,74 @@ config HTC_HEADSET
 	 headset, on the trout platform. Can be used with the msm serial
 	 debugger, but not with serial console.
 
+config HTC_HEADSET_MGR
+	tristate "HTC headset manager driver"
+	default n
+	help
+	  Provides support of HTC headset manager.
+
+config HTC_HEADSET_GPIO
+	tristate "HTC GPIO headset detection driver"
+	depends on HTC_HEADSET_MGR
+	default n
+	help
+	  Provides support of HTC GPIO headset detection.
+
+config HTC_HEADSET_PMIC
+	tristate "HTC PMIC headset detection driver"
+	depends on HTC_HEADSET_MGR
+	default n
+	help
+	  Provides support of HTC PMIC headset detection.
+
+config HTC_HEADSET_8X60
+	tristate "HTC 8X60 headset detection driver"
+	depends on HTC_HEADSET_MGR
+	default n
+	help
+	  Provides support of HTC 8X60 headset detection.
+
+config HTC_HEADSET_ONE_WIRE
+	tristate "HTC 1-wire headset detection driver"
+	depends on HTC_HEADSET_MGR
+	default n
+	help
+	  Provides support of HTC 1-wire headset detection.
+
+config HTC_HEADSET_INT_REDETECT
+	tristate "HTC headset key interrupt re-detection"
+	depends on HTC_HEADSET_MGR
+	default n
+	help
+	  Support key interrupt re-detection
+
+config HTC_INSERT_NOTIFY_DELAY
+	tristate "HTC headset insert notify delay"
+	depends on HTC_HEADSET_MGR
+	default n
+	help
+	  delay headset insert notify
+
 config TROUT_BATTCHG
 	depends on MACH_TROUT && POWER_SUPPLY
 	default y
 	bool "Trout battery / charger driver"
+
+config HTC_BATT_CORE
+        depends on POWER_SUPPLY
+        default n
+        bool "HTC battery core driver"
+
+config HTC_BATT_8960
+        depends on HTC_BATT_CORE
+        default n
+        bool "HTC battery driver for 8960"
+
+config DUTY_CYCLE_LIMIT
+	bool "Duty cycle limit charging support"
+	default n
+	help
+		support on duty cycle limit charging
 
 config HTC_PWRSINK
 	depends on MSM_SMD
@@ -2740,6 +2811,7 @@ config SENSORS_ADSP
 
 config MSM_RTB
 	bool "Register tracing"
+	depends on (!METRICO_TP || METRICO_TP!=y)
 	help
 	  Add support for logging different events to a small uncached
 	  region. This is designed to aid in debugging reset cases where the
@@ -2858,6 +2930,14 @@ config MSM_L2_ERP_2BIT_PANIC
 
 	  For production builds, it may be acceptable to say 'N' here, since
 	  an uncorrectable error might not necessarily cause further problems.
+
+config IGNORE_L2_FALSE_ALRAM
+	bool "Ignore harmless L2 port error"
+	depends on MSM_CACHE_ERP
+	default y
+	help
+	  L2 cache will sometimes generate port error which is consider harmless.
+	  Ignore the error if trigger rate is low.
 
 config MSM_DCVS
 	bool "Use MSM DCVS for CPU/GPU Frequency control"
@@ -2989,13 +3069,6 @@ config MSM_UARTDM_Core_v14
 	help
 		Select if BLSP based UART Core v.14 or higher is present.
 
-config MSM_COMMON_LOG
-	bool "Use to export symbols for parsing memory dump"
-	help
-	 Use this to export symbols to a memory dump table. This table
-	 can be used by post analysis tools to extract information from
-	 memory when device crashes.
-
 config MSM_BOOT_STATS
 	bool "Use MSM boot stats reporting"
 	help
@@ -3036,6 +3109,7 @@ config WALL_CLK_SYSFS
 	 Support the wallclk directory in sysfs filesystem to enable the
 	 wall clock simulation and read the current SFN.
 
+
 config KRAIT_REGULATOR
 	bool "Support Kraits powered via ganged regulators in the pmic"
 	help
@@ -3043,12 +3117,118 @@ config KRAIT_REGULATOR
 	 line from the PMIC. This supply line is powered by multiple
 	 regulators running in ganged mode inside the PMIC. Enable
 	 this option to support such configurations.
+
+config HTC_POWER_DEBUG
+	bool "Support htc power debug feature"
+	help
+	 Use this to enable htc power debug feature including pm statistics,
+	 clock/gpio/qpnp pin dump, wakeup source, kerenl top and autosuspend
+	 stage footprint
+
+config HTC_PANEL_PWR_REG
+        depends on ARCH_MSM8226
+        bool "Register DSI Panel Power"
+		default y if ARCH_MSM8226
+
+config MACH_M8
+        depends on ARCH_MSM8974
+        bool "MSM8974 M8"
+        help
+          Support for HTC MSM8974 M8
+
+config MACH_M8_DUG
+        depends on ARCH_MSM8974
+        bool "MSM8974 M8_DUG"
+        help
+          Support for HTC MSM8974 M8_DUG
+
+config MACH_M8_WHL
+        depends on ARCH_MSM8974
+        bool "MSM8974 M8_WHL"
+        help
+          Support for HTC MSM8974 M8_WHL
+
+config MACH_M8_WL
+        depends on ARCH_MSM8974
+        bool "MSM8974 M8_WL"
+        help
+          Support for HTC MSM8974 M8_WL
+
+config MACH_A3
+        depends on ARCH_MSM8226
+        bool "MSM8226 A3"
+        help
+          Support for HTC MSM8226 A3
+
+config MACH_MEM_UL
+        depends on ARCH_MSM8226
+        bool "MSM8226 MEM_UL"
+        help
+          Support for HTC MSM8226 MEM_UL
+
+config MACH_A5
+        depends on ARCH_MSM8226
+        bool "MSM8226 A5"
+        help
+          Support for HTC MSM8226 A5
+
+config MACH_NAME
+        string "Macine Name"
+        default ""
+        help
+          Support for Project Name
+
+config PROJECT_NAME
+        string "Project Name"
+        default ""
+        help
+          Support for Project Name
+
+config MACH_EYE_UL
+        depends on ARCH_MSM8974
+        bool "MSM8974 EYE_UL"
+        help
+          Support for HTC MSM8974 EYE_UL
+
+config MACH_MEC_UL
+        depends on ARCH_MSM8974
+        bool "MSM8974 MEC_UL"
+        help
+          Support for HTC MSM8974 MEC_UL
+
+config MACH_MEC_DWG
+        depends on ARCH_MSM8974
+        bool "MSM8974 MEC_DWG"
+        help
+          Support for HTC MSM8974 MEC_DWG
+
+config MACH_MEC_DUG
+        depends on ARCH_MSM8974
+        bool "MSM8974 MEC_DUG"
+        help
+          Support for HTC MSM8974 MEC_DUG
+
+config MACH_MEC_TL
+        depends on ARCH_MSM8974
+        bool "MSM8974 MEC_TL"
+        help
+          Support for HTC MSM8974 MEC_TL
+
+config MACH_MEC_WHL
+        depends on ARCH_MSM8974
+        bool "MSM8974 MEC_WHL"
+        help
+          Support for HTC MSM8974 MEC_WHL
+
+config HAS_MACH_MEMUTILS
+	default n
+	bool "Motorola MSM memcpy enhancements"
+	help
+	Faster memcpy performance for Krait
 endif
 
-config KERNEL_TEXT_MPU_PROT
-        bool "Enable xpu protection of kernel r/o sections"
-        help
-          Enables xpu protection of kernel code and read-only data
-          sections early in boot. Read access is permitted to
-          all masters; Write access is only permited to the
-          secure world.
+config HTC_MONITOR_SUBSYS_SLEEP_TIME
+    default n
+    bool "Monitor the sleep time of sub-system"
+    help
+        Support to monitor the sleep time of sub-system

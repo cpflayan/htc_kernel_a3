@@ -346,6 +346,15 @@ struct snd_dec_ddp {
 	__u32 params_id[18];
 	__u32 params_value[18];
 };
+
+struct snd_dec_flac {
+	__u16 sample_size;
+	__u16 min_blk_size;
+	__u16 max_blk_size;
+	__u16 min_frame_size;
+	__u16 max_frame_size;
+};
+
 union snd_codec_options {
 	struct snd_enc_wma wma;
 	struct snd_enc_vorbis vorbis;
@@ -354,6 +363,7 @@ union snd_codec_options {
 	struct snd_enc_generic generic;
 	struct snd_dec_dts dts;
 	struct snd_dec_ddp ddp;
+	struct snd_dec_flac flac_dec;
 };
 
 /** struct snd_codec_desc - description of codec capabilities
@@ -431,6 +441,13 @@ struct snd_codec {
 	struct snd_dec_dts dts;
 	union snd_codec_options options;
 	__u32 reserved[3];
+};
+
+struct dsp_effect_param {
+       uint32_t effect_type; /* 0 for POPP, 1 for COPP */
+       uint32_t module_id;
+       uint32_t param_id;
+       uint32_t payload_size;
 };
 
 #endif

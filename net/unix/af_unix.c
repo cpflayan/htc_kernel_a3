@@ -823,7 +823,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	struct dentry *dentry = NULL;
 	struct path path;
 	int err;
-	unsigned hash;
+	unsigned hash = 0;
 	struct unix_address *addr;
 	struct hlist_head *list;
 
@@ -963,7 +963,7 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 	struct net *net = sock_net(sk);
 	struct sockaddr_un *sunaddr = (struct sockaddr_un *)addr;
 	struct sock *other;
-	unsigned hash;
+	unsigned hash = 0;
 	int err;
 
 	if (addr->sa_family != AF_UNSPEC) {
@@ -1061,7 +1061,7 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	struct sock *newsk = NULL;
 	struct sock *other = NULL;
 	struct sk_buff *skb = NULL;
-	unsigned hash;
+	unsigned hash = 0;
 	int st;
 	int err;
 	long timeo;
@@ -1105,6 +1105,8 @@ restart:
 
 	/* Apparently VFS overslept socket death. Retry. */
 	if (sock_flag(other, SOCK_DEAD)) {
+		pr_err("%s other->sk_flags=%ld on %s(%d)\n", __func__, other->sk_flags,
+				current->comm, current->pid);
 		unix_state_unlock(other);
 		sock_put(other);
 		goto restart;
@@ -1121,9 +1123,14 @@ restart:
 		if (!timeo)
 			goto out_unlock;
 
+		pr_err("%s skb_queue_len=%d  sk_max_ack_backlog=%d on %s(%d)\n", __func__,
+				skb_queue_len(&other->sk_receive_queue), other->sk_max_ack_backlog,
+				current->comm, current->pid);
 		timeo = unix_wait_for_peer(other, timeo);
 
 		err = sock_intr_errno(timeo);
+		pr_err("%s timeo=0x%lx, err=%d on %s(%d)\n", __func__, timeo, err,
+				current->comm, current->pid);
 		if (signal_pending(current))
 			goto out;
 		sock_put(other);
@@ -1159,6 +1166,8 @@ restart:
 	unix_state_lock_nested(sk);
 
 	if (sk->sk_state != st) {
+		pr_err("%s sk->sk_state=%d, st=%d on %s(%d)\n", __func__, sk->sk_state,
+				st, current->comm, current->pid);
 		unix_state_unlock(sk);
 		unix_state_unlock(other);
 		sock_put(other);
@@ -1436,7 +1445,7 @@ static int unix_dgram_sendmsg(struct kiocb *kiocb, struct socket *sock,
 	struct sock *other = NULL;
 	int namelen = 0; /* fake GCC */
 	int err;
-	unsigned hash;
+	unsigned hash  = 0;
 	struct sk_buff *skb;
 	long timeo;
 	struct scm_cookie tmp_scm;
@@ -1745,7 +1754,6 @@ static void unix_copy_addr(struct msghdr *msg, struct sock *sk)
 {
 	struct unix_sock *u = unix_sk(sk);
 
-	msg->msg_namelen = 0;
 	if (u->addr) {
 		msg->msg_namelen = u->addr->len;
 		memcpy(msg->msg_name, u->addr->name, u->addr->len);
@@ -1768,8 +1776,6 @@ static int unix_dgram_recvmsg(struct kiocb *iocb, struct socket *sock,
 	err = -EOPNOTSUPP;
 	if (flags&MSG_OOB)
 		goto out;
-
-	msg->msg_namelen = 0;
 
 	err = mutex_lock_interruptible(&u->readlock);
 	if (err) {
@@ -1911,8 +1917,6 @@ static int unix_stream_recvmsg(struct kiocb *iocb, struct socket *sock,
 
 	target = sock_rcvlowat(sk, flags&MSG_WAITALL, size);
 	timeo = sock_rcvtimeo(sk, flags&MSG_DONTWAIT);
-
-	msg->msg_namelen = 0;
 
 	/* Lock the socket to prevent queue disordering
 	 * while sleeps in memcpy_tomsg
